@@ -23,10 +23,9 @@ jobs:
       - name: Cache Cabal store
         uses: actions/cache@v4
         with:
-          path: |
-            ~/.cabal/store
-            ~/.cabal/packages
-            ~/.ghc
+          path: 
+            ~/home/runner/.cache/cabal/
+            /usr/local/.ghcup/
           key: cabal-store-${{ runner.os }}-${{ hashFiles('cabal/ci-nofreeze.project.freeze') }}
           restore-keys: |
             cabal-store-${{ runner.os }}-
@@ -46,10 +45,14 @@ jobs:
 
       - name: List all files
         run: |
-          find / | grep cabal
+          find / 2>&1 | grep cabal
 
       - name: Build
         run: ./scripts/build-v2.sh build --ci --jobs 4
+
+      - name: List all files
+        run: |
+          find / 2>&1 | grep cabal
 
       - name: Upload graphql-engine binary
         uses: actions/upload-artifact@v4
