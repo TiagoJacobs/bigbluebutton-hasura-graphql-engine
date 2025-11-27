@@ -23,7 +23,10 @@ jobs:
       - name: Cache Cabal store
         uses: actions/cache@v4
         with:
-          path: ~/.cabal/store
+          path: |
+            ~/.cabal/store
+            ~/.cabal/packages
+            ~/.ghc
           key: cabal-store-${{ runner.os }}-${{ hashFiles('cabal/ci-nofreeze.project.freeze') }}
           restore-keys: |
             cabal-store-${{ runner.os }}-
@@ -41,28 +44,9 @@ jobs:
       - name: Install dependencies (toolchain + ghc + cabal)
         run: ./scripts/build-v2.sh deps --ci
 
-      - name: Detect Cabal store
+      - name: List all files
         run: |
-          echo "HOME=$HOME"
-          echo "Checking XDG state home:"
-          echo "$XDG_STATE_HOME"
-          echo
-          echo "Checking default new-style store:"
-          if [ -d "$HOME/.local/state/cabal/store" ]; then
-            echo "Found: $HOME/.local/state/cabal/store"
-          else
-            echo "Not found"
-          fi
-          echo
-          echo "Checking legacy store:"
-          if [ -d "$HOME/.cabal/store" ]; then
-            echo "Found: $HOME/.cabal/store"
-          else
-            echo "Not found"
-          fi
-          echo
-          echo "Effective config (user-config diff):"
-          cabal user-config diff || true
+          find / | grep cabal
 
       - name: Build
         run: ./scripts/build-v2.sh build --ci --jobs 4
