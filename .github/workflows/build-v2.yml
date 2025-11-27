@@ -1,0 +1,59 @@
+name: Build v2
+
+on:
+  push:
+    branches:
+      - '*-bbb'
+  pull_request:
+    branches:
+      - '*-bbb'
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache GHC and Cabal tools
+        uses: actions/cache@v4
+        with:
+          path: ~/.ghcup
+          key: ghcup-${{ runner.os }}-9.10.2
+          restore-keys: |
+            ghcup-${{ runner.os }}-
+
+      - name: Cache Cabal packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cabal/store
+            ~/.cabal/packages
+          key: cabal-${{ runner.os }}-${{ hashFiles('cabal.project.freeze', 'server/**/*.cabal') }}
+          restore-keys: |
+            cabal-${{ runner.os }}-
+
+      - name: Cache build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            dist-newstyle
+            cabal/ci-nofreeze.project
+            cabal/ci-nofreeze.project.freeze
+          key: build-${{ runner.os }}-${{ hashFiles('cabal.project.freeze', 'server/**/*.hs', 'server/**/*.cabal') }}
+          restore-keys: |
+            build-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: ./scripts/build-v2.sh deps
+
+      - name: Build
+        run: ./scripts/build-v2.sh build
+        env:
+          CABAL_JOBS: 4
+
+      - name: Upload graphql-engine binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: graphql-engine
+          path: dist-newstyle/build/x86_64-linux/ghc-9.10.2/graphql-engine-1.0.0/x/graphql-engine/opt/build/graphql-engine/graphql-engine

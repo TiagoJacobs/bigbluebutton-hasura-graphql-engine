@@ -74,3 +74,9 @@ node_modules
 *.ticky.modules
 
 yarn-error.log
+
+# BBB specific files
+cabal/ci-nofreeze.project
+cabal/ci-nofreeze.project.freeze
+
+
