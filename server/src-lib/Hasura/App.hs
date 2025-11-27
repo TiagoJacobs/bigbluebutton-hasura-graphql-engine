@@ -931,6 +931,7 @@ data ShutdownAction
 
 {- HLINT ignore runHGEServer "Avoid lambda" -}
 {- HLINT ignore runHGEServer "Use withAsync" -}
+{- HLINT ignore runHGEServer "avoid Control.Concurrent.Async.Lifted.Safe.async" -}
 runHGEServer ::
   forall m impl.
   ( MonadIO m,

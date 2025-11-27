@@ -15,45 +15,41 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Cache GHC and Cabal tools
-        uses: actions/cache@v4
-        with:
-          path: ~/.ghcup
-          key: ghcup-${{ runner.os }}-9.10.2
-          restore-keys: |
-            ghcup-${{ runner.os }}-
+      # Prepare cabal/ci-nofreeze.* so the cache key has something to hash
+      - name: Prepare cabal config/freezes
+        run: ./scripts/build-v2.sh cabal-files
 
-      - name: Cache Cabal packages
+      # Cache Cabal store (dependencies)
+      - name: Cache Cabal store
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cabal/store
-            ~/.cabal/packages
-          key: cabal-${{ runner.os }}-${{ hashFiles('cabal.project.freeze', 'server/**/*.cabal') }}
+            /home/runner/.local/state/cabal/
+            /home/runner/.cache/cabal/
+            /usr/local/.ghcup/
+          key: cabal-store-${{ runner.os }}-${{ hashFiles('cabal/ci-nofreeze.project.freeze') }}
           restore-keys: |
-            cabal-${{ runner.os }}-
+            cabal-store-${{ runner.os }}-
 
-      - name: Cache build artifacts
+      # (Optional) cache dist-newstyle for even faster rebuilds
+      - name: Cache dist-newstyle
         uses: actions/cache@v4
         with:
-          path: |
-            dist-newstyle
-            cabal/ci-nofreeze.project
-            cabal/ci-nofreeze.project.freeze
-          key: build-${{ runner.os }}-${{ hashFiles('cabal.project.freeze', 'server/**/*.hs', 'server/**/*.cabal') }}
+          path: dist-newstyle
+          key: dist-${{ runner.os }}-${{ hashFiles('cabal/ci-nofreeze.project.freeze') }}
           restore-keys: |
-            build-${{ runner.os }}-
+            dist-${{ runner.os }}-
 
-      - name: Install dependencies
-        run: ./scripts/build-v2.sh deps
+      # Install all deps (system & ghcup/cabal) using the script
+      - name: Install dependencies (toolchain + ghc + cabal)
+        run: ./scripts/build-v2.sh deps --ci
 
       - name: Build
-        run: ./scripts/build-v2.sh build
-        env:
-          CABAL_JOBS: 4
+        run: ./scripts/build-v2.sh build --ci --jobs 4
 
       - name: Upload graphql-engine binary
         uses: actions/upload-artifact@v4
         with:
           name: graphql-engine
           path: dist-newstyle/build/x86_64-linux/ghc-9.10.2/graphql-engine-1.0.0/x/graphql-engine/opt/build/graphql-engine/graphql-engine
+

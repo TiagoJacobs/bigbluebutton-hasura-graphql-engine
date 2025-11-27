@@ -392,7 +392,7 @@ data GraphQLRequestsLabels = GraphQLRequestsLabels
 
 instance ToLabels (GraphQLRequestsLabels) where
   toLabels (GraphQLRequestsLabels op_type res_status dynamic_labels) =
-    (HashMap.fromList $ [("operation_type", opTypeToLabelValue op_type), ("response_status", responseStatusToLabelValue res_status)]) <> (fromMaybe mempty (toLabels <$> dynamic_labels))
+    (HashMap.fromList $ [("operation_type", opTypeToLabelValue op_type), ("response_status", responseStatusToLabelValue res_status)]) <> maybe mempty toLabels dynamic_labels
 
 -- | Record metrics with dynamic label
 recordMetricWithLabel ::

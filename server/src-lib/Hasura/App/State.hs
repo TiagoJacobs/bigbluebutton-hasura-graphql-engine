@@ -178,7 +178,8 @@ data AppContext = AppContext
     acSchemaSampledFeatureFlags :: SchemaSampledFeatureFlags,
     acRemoteSchemaResponsePriority :: RemoteSchemaResponsePriority,
     acHeaderPrecedence :: HeaderPrecedence,
-    acTraceQueryStatus :: TraceQueryStatus
+    acTraceQueryStatus :: TraceQueryStatus,
+    acMetricsSecret :: Maybe AdminSecretHash
   }
 
 -- | Collection of the LoggerCtx, the regular Logger and the PGLogger
@@ -303,7 +304,8 @@ buildAppContextRule = proc (ServeOptions {..}, env, _keys, checkFeatureFlag) -> 
           acSchemaSampledFeatureFlags = schemaSampledFeatureFlags,
           acRemoteSchemaResponsePriority = soRemoteSchemaResponsePriority,
           acHeaderPrecedence = soHeaderPrecedence,
-          acTraceQueryStatus = soTraceQueryStatus
+          acTraceQueryStatus = soTraceQueryStatus,
+          acMetricsSecret = soMetricsSecret
         }
   where
     buildEventEngineCtx = Inc.cache proc (httpPoolSize, fetchInterval, fetchBatchSize) -> do

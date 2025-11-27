@@ -49,6 +49,7 @@ import Data.Kind (Type)
 import Data.String (fromString)
 import Data.Text qualified as T
 import Data.Text.Conversions (convertText)
+import Data.Text.Encoding qualified as TE
 import Data.Text.Extended
 import Data.Text.Lazy qualified as LT
 import Data.Text.Lazy.Encoding qualified as TL
@@ -100,6 +101,7 @@ import Hasura.Server.AppStateRef
     withSchemaCacheReadUpdate,
   )
 import Hasura.Server.Auth (AuthMode (..), UserAuthentication (..))
+import Hasura.Server.Auth qualified as Auth
 import Hasura.Server.Compression
 import Hasura.Server.Init
 import Hasura.Server.Limits
@@ -120,7 +122,8 @@ import Network.Wai.Handler.WebSockets.Custom qualified as WSC
 import System.FilePath (isRelative, joinPath, splitExtension, takeFileName)
 import System.Mem (performMajorGC)
 import System.Metrics qualified as EKG
-import System.Metrics.Json qualified as EKG
+import System.Metrics.Distribution qualified as Dist
+import System.Metrics.Json qualified as EKGJson
 import Text.Mustache qualified as M
 import Web.Spock.Action qualified as Spock
 import Web.Spock.Core ((<//>))
@@ -240,6 +243,50 @@ isConfigEnabled ac = S.member CONFIG $ acEnabledAPIs ac
 
 isDeveloperAPIEnabled :: AppContext -> Bool
 isDeveloperAPIEnabled ac = S.member DEVELOPER $ acEnabledAPIs ac
+
+isMetricsEnabled :: AppContext -> Bool
+isMetricsEnabled ac = S.member METRICS $ acEnabledAPIs ac
+
+-- | Convert EKG metrics to Prometheus text format
+-- See: https://prometheus.io/docs/instrumenting/exposition_formats/
+ekgToPrometheus :: EKG.Sample -> Text
+ekgToPrometheus sample =
+  T.unlines $ mapMaybe formatMetric $ HashMap.toList sample
+  where
+    formatMetric :: (EKG.Identifier, EKG.Value) -> Maybe Text
+    formatMetric (EKG.Identifier name tags, value) =
+      let -- Prometheus metric names must match [a-zA-Z_:][a-zA-Z0-9_:]*
+          -- Replace dots with underscores for compatibility
+          sanitizedName = T.replace "." "_" name
+          -- Format labels as key="value" pairs
+          labelPairs = HashMap.toList tags
+          labelsText =
+            if null labelPairs
+              then ""
+              else
+                "{"
+                  <> T.intercalate "," (map (\(k, v) -> k <> "=\"" <> escapeLabel v <> "\"") labelPairs)
+                  <> "}"
+          metricNameWithLabels = sanitizedName <> labelsText
+       in case value of
+            EKG.Counter n -> Just $ metricNameWithLabels <> " " <> tshow n
+            EKG.Gauge n -> Just $ metricNameWithLabels <> " " <> tshow n
+            EKG.Label _ -> Nothing -- Labels are metadata, not metrics in Prometheus
+            EKG.Distribution stats ->
+              -- Export distribution as summary-like metrics
+              Just $
+                T.unlines
+                  [ metricNameWithLabels <> "_mean " <> tshow (Dist.mean stats),
+                    metricNameWithLabels <> "_variance " <> tshow (Dist.variance stats),
+                    metricNameWithLabels <> "_count " <> tshow (Dist.count stats),
+                    metricNameWithLabels <> "_sum " <> tshow (Dist.sum stats),
+                    metricNameWithLabels <> "_min " <> tshow (Dist.min stats),
+                    metricNameWithLabels <> "_max " <> tshow (Dist.max stats)
+                  ]
+
+    -- Escape special characters in label values according to Prometheus format
+    escapeLabel :: Text -> Text
+    escapeLabel = T.replace "\\" "\\\\" . T.replace "\"" "\\\"" . T.replace "\n" "\\n"
 
 -- {-# SCC parseBody #-}
 parseBody :: (FromJSON a, MonadError QErr m) => BL.ByteString -> m (Value, a)
@@ -969,6 +1016,35 @@ httpApp setupHook appStateRef AppEnv {..} consoleType ekgStore closeWebsocketsOn
     setHeader jsonHeader
     Spock.lazyBytes $ encode $ object $ ["version" .= currentVersion] <> extraData
 
+  -- Prometheus metrics endpoint
+  Spock.get "v1/metrics" $ do
+    appContext <- liftIO $ getAppContext appStateRef
+    case acMetricsSecret appContext of
+      Nothing -> do
+        -- No secret configured, require it to be set
+        Spock.setStatus HTTP.status500
+        Spock.text "HASURA_GRAPHQL_METRICS_SECRET must be set to use the metrics endpoint"
+      Just expectedSecret -> do
+        -- Check for x-hasura-metrics-secret header
+        req <- Spock.request
+        let headers = Wai.requestHeaders req
+            providedSecret = lookup "x-hasura-metrics-secret" headers
+        case providedSecret of
+          Nothing -> do
+            Spock.setStatus HTTP.status401
+            Spock.text "Missing x-hasura-metrics-secret header"
+          Just providedSecretValue -> do
+            let providedHash = Auth.hashAdminSecret $ TE.decodeUtf8 providedSecretValue
+            if providedHash == expectedSecret
+              then do
+                sample <- liftIO $ EKG.sampleAll ekgStore
+                let prometheusText = ekgToPrometheus sample
+                Spock.setHeader "Content-Type" "text/plain; version=0.0.4; charset=utf-8"
+                Spock.text prometheusText
+              else do
+                Spock.setStatus HTTP.status401
+                Spock.text "Invalid x-hasura-metrics-secret"
+
   responseErrorsConfig <- liftIO $ acResponseInternalErrorsConfig <$> getAppContext appStateRef
 
   let customEndpointHandler ::
@@ -1105,7 +1181,7 @@ httpApp setupHook appStateRef AppEnv {..} consoleType ekgStore closeWebsocketsOn
       $ do
         onlyAdmin
         respJ <- liftIO $ EKG.sampleAll ekgStore
-        return (emptyHttpLogGraphQLInfo, JSONResp $ HttpResponse (encJFromJValue $ EKG.sampleToJson respJ) [])
+        return (emptyHttpLogGraphQLInfo, JSONResp $ HttpResponse (encJFromJValue $ EKGJson.sampleToJson respJ) [])
 
   -- This deprecated endpoint used to show the query plan cache pre-PDV.
   -- Eventually this endpoint can be removed.
