@@ -33,7 +33,7 @@ import Hasura.Server.App (CEConsoleType (OSSConsole))
 import Hasura.Server.Init
 import Hasura.Server.Metrics (ServerMetricsSpec, createServerMetrics)
 import Hasura.Server.Migrate (downgradeCatalog)
-import Hasura.Server.Prometheus (makeDummyPrometheusMetrics, makePrometheusMetrics)
+import Hasura.Server.Prometheus (makeDummyPrometheusMetrics)
 import Hasura.Server.Version
 import Hasura.ShutdownLatch
 import Hasura.Tracing (sampleAlways)
@@ -97,13 +97,12 @@ runApp env (HGEOptions rci metadataDbUrl hgeCmd) = do
 
         pure (EKG.subset EKG.emptyOf store, serverMetrics)
 
-      -- Use real Prometheus metrics instead of dummy ones
-      (prometheusMetrics, prometheusStore) <- makePrometheusMetrics
+      prometheusMetrics <- makeDummyPrometheusMetrics
 
       -- It'd be nice if we didn't have to call lowerManagedT twice here, but
       -- there is a data dependency problem since the call to runAppM below
       -- depends on appCtx.
-      runManagedT (initialiseAppEnv env basicConnectionInfo serveOptions (Just prometheusStore) serverMetrics prometheusMetrics sampleAlways) \(appInit, appEnv) -> do
+      runManagedT (initialiseAppEnv env basicConnectionInfo serveOptions Nothing serverMetrics prometheusMetrics sampleAlways) \(appInit, appEnv) -> do
         -- Catches the SIGTERM signal and initiates a graceful shutdown.
         -- Graceful shutdown for regular HTTP requests is already implemented in
         -- Warp, and is triggered by invoking the 'closeSocket' callback.
