@@ -125,6 +125,7 @@ data AppEnv = AppEnv
     appEnvShutdownLatch :: ShutdownLatch,
     appEnvMetaVersionRef :: STM.TMVar MetadataResourceVersion,
     appEnvPrometheusMetrics :: PrometheusMetrics,
+    appEnvPrometheusMetricsStore :: Maybe PrometheusMetricsStore,
     appEnvTraceSamplingPolicy :: Tracing.SamplingPolicy,
     appEnvSubscriptionState :: ES.SubscriptionsState,
     appEnvLockedEventsCtx :: LockedEventsCtx,

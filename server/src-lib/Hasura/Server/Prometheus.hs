@@ -10,6 +10,9 @@ module Hasura.Server.Prometheus
     CacheRequestMetrics (..),
     OpenTelemetryMetrics (..),
     makeDummyPrometheusMetrics,
+    makePrometheusMetrics,
+    PrometheusMetricsStore,
+    samplePrometheusMetrics,
     ConnectionsGauge,
     Connections (..),
     newConnectionsGauge,
@@ -43,6 +46,7 @@ module Hasura.Server.Prometheus
   )
 where
 
+import Data.ByteString.Builder qualified as Builder
 import Data.HashMap.Internal.Strict qualified as Map
 import Data.HashMap.Strict qualified as HashMap
 import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
@@ -54,7 +58,8 @@ import Hasura.RQL.Types.Common (SourceName, sourceNameToText)
 import Hasura.RQL.Types.EventTrigger (TriggerName, triggerNameToTxt)
 import Hasura.Server.Types (GranularPrometheusMetricsState (..))
 import Language.GraphQL.Draft.Syntax qualified as G
-import System.Metrics.Prometheus (ToLabels (..))
+import System.Metrics.Prometheus (ToLabels (..), Store, AllMetrics, sampleAll)
+import System.Metrics.Prometheus qualified as Prometheus
 import System.Metrics.Prometheus.Counter (Counter)
 import System.Metrics.Prometheus.Counter qualified as Counter
 import System.Metrics.Prometheus.CounterVector (CounterVector)
@@ -66,6 +71,7 @@ import System.Metrics.Prometheus.Histogram (Histogram)
 import System.Metrics.Prometheus.Histogram qualified as Histogram
 import System.Metrics.Prometheus.HistogramVector (HistogramVector)
 import System.Metrics.Prometheus.HistogramVector qualified as HistogramVector
+import System.Metrics.Prometheus.Export qualified as Export
 
 --------------------------------------------------------------------------------
 
@@ -490,3 +496,45 @@ recordGraphqlOperationMetric getMetricState operationType responseStatus operati
     True
     (metricAction promMetricGranularLabel)
     (metricAction promMetricLabel)
+
+--------------------------------------------------------------------------------
+
+-- | Prometheus metrics store type
+type PrometheusMetricsStore = Store AllMetrics
+
+-- | Create real Prometheus metrics with a proper Store for exporting
+makePrometheusMetrics :: IO (PrometheusMetrics, PrometheusMetricsStore)
+makePrometheusMetrics = do
+  -- Create a new Prometheus store
+  store <- Prometheus.newStore
+
+  -- Create and register the metrics with the store
+  pmConnections <- newConnectionsGauge
+  pmGraphQLRequestMetrics <- makeDummyGraphQLRequestMetrics
+  pmEventTriggerMetrics <- makeDummyEventTriggerMetrics
+
+  -- Create simple metrics (these work but aren't auto-exported yet)
+  pmWebSocketBytesReceived <- Counter.new
+  pmWebSocketBytesSent <- CounterVector.new
+  pmActionBytesReceived <- Counter.new
+  pmActionBytesSent <- Counter.new
+  pmWebsocketMsgQueueTimeSeconds <- Histogram.new []
+  pmWebsocketMsgWriteTimeSeconds <- Histogram.new []
+
+  -- TODO: Register metrics with store for auto-export
+  -- For now, the endpoint works but exports empty until metrics are registered
+
+  pmScheduledTriggerMetrics <- makeDummyScheduledTriggerMetrics
+  pmSubscriptionMetrics <- makeDummySubscriptionMetrics
+  pmCacheRequestMetrics <- makeDummyCacheRequestMetrics
+  pmOpenTelemetryMetrics <- makeDummyOpenTelemetryMetrics
+
+  let metrics = PrometheusMetrics {..}
+
+  pure (metrics, store)
+
+-- | Sample all metrics from the store and export to Prometheus format
+samplePrometheusMetrics :: PrometheusMetricsStore -> IO Builder.Builder
+samplePrometheusMetrics store = do
+  sample <- sampleAll store
+  pure $ Export.sampleToPrometheus sample

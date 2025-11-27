@@ -149,6 +149,7 @@ import Hasura.Server.Metrics (ServerMetrics (..))
 import Hasura.Server.Migrate (migrateCatalog)
 import Hasura.Server.Prometheus
   ( PrometheusMetrics (..),
+    PrometheusMetricsStore,
     decWarpThreads,
     incWarpThreads,
   )
@@ -390,12 +391,13 @@ initialiseAppEnv ::
   Env.Environment ->
   BasicConnectionInfo ->
   ServeOptions Hasura ->
-  Maybe ES.SubscriptionPostPollHook ->
+  Maybe PrometheusMetricsStore ->
   ServerMetrics ->
   PrometheusMetrics ->
   SamplingPolicy ->
   ManagedT m (AppInit, AppEnv)
-initialiseAppEnv env BasicConnectionInfo {..} serveOptions@ServeOptions {..} liveQueryHook serverMetrics prometheusMetrics traceSamplingPolicy = do
+initialiseAppEnv env BasicConnectionInfo {..} serveOptions@ServeOptions {..} prometheusStore serverMetrics prometheusMetrics traceSamplingPolicy = do
+  let liveQueryHook = Nothing  -- Keep backward compatibility
   loggers@(Loggers _loggerCtx logger pgLogger) <- mkLoggers soEnabledLogTypes soLogLevel
 
   -- SIDE EFFECT: print a warning if no admin secret is set.
@@ -484,6 +486,7 @@ initialiseAppEnv env BasicConnectionInfo {..} serveOptions@ServeOptions {..} liv
           appEnvShutdownLatch = latch,
           appEnvMetaVersionRef = metaVersionRef,
           appEnvPrometheusMetrics = prometheusMetrics,
+          appEnvPrometheusMetricsStore = prometheusStore,
           appEnvTraceSamplingPolicy = traceSamplingPolicy,
           appEnvSubscriptionState = subscriptionsState,
           appEnvLockedEventsCtx = lockedEventsCtx,

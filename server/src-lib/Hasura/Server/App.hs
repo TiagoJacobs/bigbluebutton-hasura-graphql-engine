@@ -106,6 +106,7 @@ import Hasura.Server.Limits
 import Hasura.Server.Logging
 import Hasura.Server.Middleware
 import Hasura.Server.OpenAPI (buildOpenAPI)
+import Hasura.Server.Prometheus (samplePrometheusMetrics)
 import Hasura.Server.Rest
 import Hasura.Server.Types
 import Hasura.Server.Utils
@@ -120,7 +121,7 @@ import Network.Wai.Handler.WebSockets.Custom qualified as WSC
 import System.FilePath (isRelative, joinPath, splitExtension, takeFileName)
 import System.Mem (performMajorGC)
 import System.Metrics qualified as EKG
-import System.Metrics.Json qualified as EKG
+import System.Metrics.Json qualified as EKGJSON
 import Text.Mustache qualified as M
 import Web.Spock.Action qualified as Spock
 import Web.Spock.Core ((<//>))
@@ -240,6 +241,28 @@ isConfigEnabled ac = S.member CONFIG $ acEnabledAPIs ac
 
 isDeveloperAPIEnabled :: AppContext -> Bool
 isDeveloperAPIEnabled ac = S.member DEVELOPER $ acEnabledAPIs ac
+
+isMetricsEnabled :: AppContext -> Bool
+isMetricsEnabled ac = S.member METRICS $ acEnabledAPIs ac
+
+-- Convert EKG metrics to Prometheus format
+ekgToPrometheus :: EKG.Sample -> Text
+ekgToPrometheus sample =
+  let metrics = HashMap.toList sample
+      formatMetric (EKG.Identifier name tags, value) =
+        let baseName = T.replace "." "_" name
+            tagsList = HashMap.toList tags
+            tagsStr = if null tagsList
+                      then ""
+                      else "{" <> T.intercalate "," (map (\(k,v) -> k <> "=\"" <> v <> "\"") tagsList) <> "}"
+            metricName = baseName <> tagsStr
+        in case value of
+          EKG.Counter n -> metricName <> " " <> tshow n
+          EKG.Gauge n -> metricName <> " " <> tshow n
+          EKG.Label txt -> "# " <> baseName <> ": " <> txt
+          EKG.Distribution _stats ->
+            "# " <> baseName <> " (distribution stats omitted)"
+  in T.unlines $ map formatMetric metrics
 
 -- {-# SCC parseBody #-}
 parseBody :: (FromJSON a, MonadError QErr m) => BL.ByteString -> m (Value, a)
@@ -969,6 +992,14 @@ httpApp setupHook appStateRef AppEnv {..} consoleType ekgStore closeWebsocketsOn
     setHeader jsonHeader
     Spock.lazyBytes $ encode $ object $ ["version" .= currentVersion] <> extraData
 
+  -- Prometheus metrics endpoint
+  Spock.get "v1/metrics" $ do
+    -- Export metrics from EKG store in Prometheus format
+    sample <- liftIO $ EKG.sampleAll ekgStore
+    let prometheusText = ekgToPrometheus sample
+    Spock.setHeader "Content-Type" "text/plain; version=0.0.4"
+    Spock.text prometheusText
+
   responseErrorsConfig <- liftIO $ acResponseInternalErrorsConfig <$> getAppContext appStateRef
 
   let customEndpointHandler ::
@@ -1105,7 +1136,7 @@ httpApp setupHook appStateRef AppEnv {..} consoleType ekgStore closeWebsocketsOn
       $ do
         onlyAdmin
         respJ <- liftIO $ EKG.sampleAll ekgStore
-        return (emptyHttpLogGraphQLInfo, JSONResp $ HttpResponse (encJFromJValue $ EKG.sampleToJson respJ) [])
+        return (emptyHttpLogGraphQLInfo, JSONResp $ HttpResponse (encJFromJValue $ EKGJSON.sampleToJson respJ) [])
 
   -- This deprecated endpoint used to show the query plan cache pre-PDV.
   -- Eventually this endpoint can be removed.
