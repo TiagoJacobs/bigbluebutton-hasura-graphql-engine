@@ -24,7 +24,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: 
-            ~/home/runner/.cache/cabal/
+            /home/runner/.local/
+            /home/runner/.cache/cabal/
             /usr/local/.ghcup/
           key: cabal-store-${{ runner.os }}-${{ hashFiles('cabal/ci-nofreeze.project.freeze') }}
           restore-keys: |
