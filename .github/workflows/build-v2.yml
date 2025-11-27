@@ -23,7 +23,7 @@ jobs:
       - name: Cache Cabal store
         uses: actions/cache@v4
         with:
-          path: ~/.cabal/store
+          path: ~/.local/state/cabal/store
           key: cabal-store-${{ runner.os }}-${{ hashFiles('cabal/ci-nofreeze.project.freeze') }}
           restore-keys: |
             cabal-store-${{ runner.os }}-
@@ -40,6 +40,14 @@ jobs:
       # Install all deps (system & ghcup/cabal) using the script
       - name: Install dependencies (toolchain + ghc + cabal)
         run: ./scripts/build-v2.sh deps --ci
+
+      - name: Debug Cabal store
+        run: |
+          echo "Cabal store reported by cabal:" 
+          cabal --store-dir
+          echo "Home is $HOME"
+          echo "New-style store exists?"; [ -d "$HOME/.local/state/cabal/store" ] && echo yes || echo no
+          echo "Old-style store exists?"; [ -d "$HOME/.cabal/store" ] && echo yes || echo no
 
       - name: Build
         run: ./scripts/build-v2.sh build --ci --jobs 4
