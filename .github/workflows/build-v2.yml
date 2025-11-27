@@ -44,16 +44,8 @@ jobs:
       - name: Install dependencies (toolchain + ghc + cabal)
         run: ./scripts/build-v2.sh deps --ci
 
-      - name: List all files
-        run: |
-          find / 2>&1 | grep cabal
-
       - name: Build
         run: ./scripts/build-v2.sh build --ci --jobs 4
-
-      - name: List all files
-        run: |
-          find / 2>&1 | grep cabal
 
       - name: Upload graphql-engine binary
         uses: actions/upload-artifact@v4
