@@ -30,7 +30,8 @@ ssh bigbluebutton@bbb30 "
   RED='\e[31m'
   RESET='\e[0m'
 
-  echo -e \"\${BLUE}==> Stopping bbb-graphql-server.service ...\${RESET}\"
+  echo -e \"\${BLUE}==> Stopping all bbb-graphql-server instances ...\${RESET}\"
+  sudo systemctl stop 'bbb-graphql-server@*.service' || true
   sudo systemctl stop bbb-graphql-server.service || true
 
   echo -e \"\${BLUE}==> Ensuring Hasura is fully stopped ...\${RESET}\"
@@ -45,8 +46,9 @@ ssh bigbluebutton@bbb30 "
   sudo cp /tmp/graphql-engine /usr/bin/hasura-graphql-engine
   sudo chmod +x /usr/bin/hasura-graphql-engine
 
-  echo -e \"\${BLUE}==> Starting bbb-graphql-server.service ...\${RESET}\"
+  echo -e \"\${BLUE}==> Starting all bbb-graphql-server instances ...\${RESET}\"
   sudo systemctl start bbb-graphql-server.service
+  sudo systemctl start 'bbb-graphql-server@*.service' || true
 
   echo -e \"\${GREEN}Deployment completed successfully! 🚀\${RESET}\"
 "
