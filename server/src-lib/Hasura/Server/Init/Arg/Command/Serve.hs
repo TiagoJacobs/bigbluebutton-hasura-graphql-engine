@@ -76,6 +76,7 @@ module Hasura.Server.Init.Arg.Command.Serve
     configuredHeaderPrecedenceOption,
     traceQueryStatusOption,
     serverTimeoutOption,
+    metricsEnabledOption,
     metricsSecretOption,
 
     -- * Pretty Printer
@@ -180,6 +181,7 @@ serveCommandParser =
     <*> parseDisableNativeQueryValidation
     <*> parsePreserve401Errors
     <*> parseServerTimeout
+    <*> parseMetricsEnabled
     <*> parseMetricsSecret
 
 --------------------------------------------------------------------------------
@@ -1559,9 +1561,28 @@ serveCmdFooter =
         Config.optionPP configuredHeaderPrecedenceOption,
         Config.optionPP preserve401ErrorsOption,
         Config.optionPP serverTimeoutOption,
+        Config.optionPP metricsEnabledOption,
         Config.optionPP metricsSecretOption
       ]
     eventEnvs = [Config.optionPP graphqlEventsHttpPoolSizeOption, Config.optionPP graphqlEventsFetchIntervalOption]
+
+parseMetricsEnabled :: Opt.Parser (Maybe Bool)
+parseMetricsEnabled =
+  Opt.optional
+    $ Opt.option
+      (Opt.eitherReader Env.fromEnv)
+      ( Opt.long "metrics-enabled"
+          <> Opt.metavar "<true|false>"
+          <> Opt.help (Config._helpMessage metricsEnabledOption)
+      )
+
+metricsEnabledOption :: Config.Option Bool
+metricsEnabledOption =
+  Config.Option
+    { Config._default = False,
+      Config._envVar = "HASURA_GRAPHQL_METRICS_ENABLED",
+      Config._helpMessage = "Enable the metrics endpoint (default: false)"
+    }
 
 parseMetricsSecret :: Opt.Parser (Maybe Auth.AdminSecretHash)
 parseMetricsSecret =

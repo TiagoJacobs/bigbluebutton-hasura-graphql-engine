@@ -341,6 +341,7 @@ data ServeOptionsRaw impl = ServeOptionsRaw
     rsoDisableNativeQueryValidation :: NativeQuery.Validation.DisableNativeQueryValidation,
     rsoPreserve401Errors :: Preserve401ErrorsStatus,
     rsoServerTimeout :: Maybe (Refined NonNegative Int),
+    rsoMetricsEnabled :: Maybe Bool,
     rsoMetricsSecret :: Maybe Auth.AdminSecretHash
   }
 
@@ -671,6 +672,7 @@ data ServeOptions impl = ServeOptions
     soDisableNativeQueryValidation :: NativeQuery.Validation.DisableNativeQueryValidation,
     soPreserve401Errors :: Preserve401ErrorsStatus,
     soServerTimeout :: Refined NonNegative Int,
+    soMetricsEnabled :: Bool,
     soMetricsSecret :: Maybe Auth.AdminSecretHash
   }
 

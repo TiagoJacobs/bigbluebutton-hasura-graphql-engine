@@ -172,7 +172,12 @@ mkServeOptions sor@ServeOptionsRaw {..} = do
   soDangerousBooleanCollapse <- withOptionDefault rsoDangerousBooleanCollapse dangerousBooleanCollapseOption
   soBackwardsCompatibleNullInNonNullableVariables <- withOptionDefault rsoBackwardsCompatibleNullInNonNullableVariables backwardsCompatibleNullInNonNullableVariablesOption
   soRemoteNullForwardingPolicy <- withOptionDefault rsoRemoteNullForwardingPolicy remoteNullForwardingPolicyOption
-  soEnabledAPIs <- withOptionDefault rsoEnabledAPIs enabledAPIsOption
+  soMetricsEnabled <- withOptionDefault rsoMetricsEnabled metricsEnabledOption
+  enabledAPIs <- withOptionDefault rsoEnabledAPIs enabledAPIsOption
+  -- Conditionally add METRICS to the enabled APIs based on soMetricsEnabled
+  let soEnabledAPIs = if soMetricsEnabled
+                       then HashSet.insert METRICS enabledAPIs
+                       else HashSet.delete METRICS enabledAPIs
   soLiveQueryOpts <- do
     _lqoRefetchInterval <- withOptionDefault rsoMxRefetchInt mxRefetchDelayOption
     _lqoBatchSize <- withOptionDefault rsoMxBatchSize mxBatchSizeOption

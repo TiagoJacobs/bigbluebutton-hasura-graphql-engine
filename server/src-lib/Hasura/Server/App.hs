@@ -1019,31 +1019,38 @@ httpApp setupHook appStateRef AppEnv {..} consoleType ekgStore closeWebsocketsOn
   -- Prometheus metrics endpoint
   Spock.get "v1/metrics" $ do
     appContext <- liftIO $ getAppContext appStateRef
-    case acMetricsSecret appContext of
-      Nothing -> do
-        -- No secret configured, require it to be set
-        Spock.setStatus HTTP.status500
-        Spock.text "HASURA_GRAPHQL_METRICS_SECRET must be set to use the metrics endpoint"
-      Just expectedSecret -> do
-        -- Check for x-hasura-metrics-secret header
-        req <- Spock.request
-        let headers = Wai.requestHeaders req
-            providedSecret = lookup "x-hasura-metrics-secret" headers
-        case providedSecret of
-          Nothing -> do
-            Spock.setStatus HTTP.status401
-            Spock.text "Missing x-hasura-metrics-secret header"
-          Just providedSecretValue -> do
-            let providedHash = Auth.hashAdminSecret $ TE.decodeUtf8 providedSecretValue
-            if providedHash == expectedSecret
-              then do
-                sample <- liftIO $ EKG.sampleAll ekgStore
-                let prometheusText = ekgToPrometheus sample
-                Spock.setHeader "Content-Type" "text/plain; version=0.0.4; charset=utf-8"
-                Spock.text prometheusText
-              else do
-                Spock.setStatus HTTP.status401
-                Spock.text "Invalid x-hasura-metrics-secret"
+    -- Check if metrics are enabled
+    if not (acMetricsEnabled appContext)
+      then do
+        Spock.setStatus HTTP.status404
+        Spock.text "Metrics endpoint is not enabled. Set HASURA_GRAPHQL_METRICS_ENABLED=true to enable it."
+      else case acMetricsSecret appContext of
+        Nothing -> do
+          -- No secret configured, allow public access
+          sample <- liftIO $ EKG.sampleAll ekgStore
+          let prometheusText = ekgToPrometheus sample
+          Spock.setHeader "Content-Type" "text/plain; version=0.0.4; charset=utf-8"
+          Spock.text prometheusText
+        Just expectedSecret -> do
+          -- Check for x-hasura-metrics-secret header
+          req <- Spock.request
+          let headers = Wai.requestHeaders req
+              providedSecret = lookup "x-hasura-metrics-secret" headers
+          case providedSecret of
+            Nothing -> do
+              Spock.setStatus HTTP.status401
+              Spock.text "Missing x-hasura-metrics-secret header"
+            Just providedSecretValue -> do
+              let providedHash = Auth.hashAdminSecret $ TE.decodeUtf8 providedSecretValue
+              if providedHash == expectedSecret
+                then do
+                  sample <- liftIO $ EKG.sampleAll ekgStore
+                  let prometheusText = ekgToPrometheus sample
+                  Spock.setHeader "Content-Type" "text/plain; version=0.0.4; charset=utf-8"
+                  Spock.text prometheusText
+                else do
+                  Spock.setStatus HTTP.status401
+                  Spock.text "Invalid x-hasura-metrics-secret"
 
   responseErrorsConfig <- liftIO $ acResponseInternalErrorsConfig <$> getAppContext appStateRef
 

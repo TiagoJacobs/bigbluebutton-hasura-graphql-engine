@@ -179,6 +179,7 @@ data AppContext = AppContext
     acRemoteSchemaResponsePriority :: RemoteSchemaResponsePriority,
     acHeaderPrecedence :: HeaderPrecedence,
     acTraceQueryStatus :: TraceQueryStatus,
+    acMetricsEnabled :: Bool,
     acMetricsSecret :: Maybe AdminSecretHash
   }
 
@@ -305,6 +306,7 @@ buildAppContextRule = proc (ServeOptions {..}, env, _keys, checkFeatureFlag) -> 
           acRemoteSchemaResponsePriority = soRemoteSchemaResponsePriority,
           acHeaderPrecedence = soHeaderPrecedence,
           acTraceQueryStatus = soTraceQueryStatus,
+          acMetricsEnabled = soMetricsEnabled,
           acMetricsSecret = soMetricsSecret
         }
   where
